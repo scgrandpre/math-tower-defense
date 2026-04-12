@@ -227,11 +227,9 @@ let game = {
   hoveredCell: null,
   mouseX: 0, mouseY: 0,
   // Math
-  mathTarget: null,
-  mathEquation: null,
+  mathActive: false,
   mathInput: '',
   mathCooldown: 0,
-  mathFeedback: null,
   // Effects
   shakeAmount: 0,
   shakeDecay: 0.85,
@@ -261,7 +259,7 @@ function createMonster(type, wave) {
     alive: true, reachedEnd: false,
     healTimer: 0,
     armorType: def.armorType || null,
-    equation: game.profile ? generateEquation(game.profile.grade, wave) : generateEquation(3, wave),
+    equation: generateSharedEquation(wave),
     deathTimer: -1,
   };
 }
@@ -336,7 +334,7 @@ function startWave() {
   game.phase = 'active';
   game.spawnQueue = buildWaveQueue(game.wave - 1);
   game.spawnTimer = 0;
-  game.mathTarget = null;
+  game.mathActive = false;
   game.mathCooldown = 0;
   game.mathInput = '';
   showBanner(`Wave ${game.wave}`);
@@ -347,40 +345,76 @@ function showBanner(text) {
   game.bannerTimer = 2.0;
 }
 
-// ============================================================
-// MATH TARGETING
-// ============================================================
-function pickMathTarget() {
+// Generate equation, ~30% chance to reuse an existing monster's answer for multi-kill potential
+function generateSharedEquation(wave) {
+  const grade = game.profile ? game.profile.grade : 3;
   const alive = game.monsters.filter(m => m.alive && !m.reachedEnd);
-  if (!alive.length) { game.mathTarget = null; return; }
-  game.mathTarget = alive[Math.floor(Math.random() * alive.length)];
-  game.mathEquation = game.mathTarget.equation;
-  game.mathInput = '';
+  if (alive.length > 0 && Math.random() < 0.3) {
+    // Pick an existing answer and generate a DIFFERENT equation with the same result
+    const target = alive[Math.floor(Math.random() * alive.length)];
+    const ans = target.equation.answer;
+    const eq = generateEquationWithAnswer(grade, wave, ans);
+    if (eq) return eq;
+  }
+  return generateEquation(grade, wave);
 }
 
-function submitMathAnswer() {
-  if (!game.mathTarget || !game.mathTarget.alive) return;
-  const ans = parseInt(game.mathInput);
-  if (isNaN(ans)) return;
-  if (ans === game.mathEquation.answer) {
-    // Correct!
-    const dmg = Math.round(game.mathTarget.maxHp * 0.4);
-    dealDamage(game.mathTarget, dmg, 'math');
-    game.gold += 10;
-    addFloatingText(game.mathTarget.x, game.mathTarget.y - 30, 'MATH BONUS!', '#FFD700', 22);
-    addFloatingText(game.mathTarget.x + 20, game.mathTarget.y - 15, '+10g', '#FFD700', 16);
-    spawnParticles(game.mathTarget.x, game.mathTarget.y, 25, ['#FFD700', '#FFA000', '#FFEB3B'], [50, 200], [0.5, 1.0], [2, 5]);
-    game.shakeAmount = 5;
+// Generate an equation that evaluates to a specific answer
+function generateEquationWithAnswer(grade, wave, answer) {
+  if (answer < 2) return null;
+  const r = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+  // Try a few forms
+  if (grade <= 3) {
+    const b = r(1, Math.min(answer - 1, 20));
+    if (Math.random() < 0.5) return { display: `${answer - b} + ${b}`, answer };
+    else { const a = answer + r(1, 15); return { display: `${a} - ${a - answer}`, answer }; }
   } else {
-    // Wrong
-    addFloatingText(game.mathTarget.x, game.mathTarget.y - 30, 'WRONG!', '#FF3333', 18);
-    spawnParticles(game.mathTarget.x, game.mathTarget.y, 8, ['#FF3333', '#FF6666'], [50, 120], [0.3, 0.5], [2, 4]);
-    game.mathTarget.equation = generateEquation(game.profile.grade, game.wave);
-    game.mathEquation = game.mathTarget.equation;
+    // Check if answer has factors
+    for (let f = 2; f <= 12; f++) {
+      if (answer % f === 0 && answer / f >= 2 && answer / f <= 12) {
+        return { display: `${f} \u00d7 ${answer / f}`, answer };
+      }
+    }
+    const b = r(1, Math.min(answer - 1, 30));
+    return { display: `${answer - b} + ${b}`, answer };
   }
-  game.mathTarget = null;
-  game.mathCooldown = performance.now() + 3000;
+}
+
+// ============================================================
+// MATH TARGETING — all monsters show equations, answer hits all matches
+// ============================================================
+function submitMathAnswer() {
+  const ans = parseInt(game.mathInput);
   game.mathInput = '';
+  if (isNaN(ans)) return;
+  const alive = game.monsters.filter(m => m.alive && !m.reachedEnd);
+  const hits = alive.filter(m => m.equation.answer === ans);
+  if (hits.length > 0) {
+    let totalGold = 0;
+    for (const m of hits) {
+      const dmg = Math.round(m.maxHp * 0.4);
+      dealDamage(m, dmg, 'math');
+      addFloatingText(m.x, m.y - 30, 'MATH HIT!', '#FFD700', 20);
+      spawnParticles(m.x, m.y, 25, ['#FFD700', '#FFA000', '#FFEB3B'], [50, 200], [0.5, 1.0], [2, 5]);
+      // Give this monster a new equation
+      m.equation = generateEquation(game.profile.grade, game.wave);
+      totalGold += 10;
+    }
+    game.gold += totalGold;
+    if (hits.length > 1) {
+      addFloatingText(GAME_W / 2, H / 2 - 60, `MULTI-HIT x${hits.length}!`, '#FF6D00', 28);
+      game.shakeAmount = 6 + hits.length;
+    } else {
+      game.shakeAmount = 5;
+    }
+    addFloatingText(hits[0].x + 20, hits[0].y - 15, `+${totalGold}g`, '#FFD700', 16);
+  } else {
+    // Wrong — no monsters matched
+    addFloatingText(GAME_W / 2, H - 110, 'NO MATCH!', '#FF3333', 18);
+    spawnParticles(GAME_W / 2, H - 60, 8, ['#FF3333', '#FF6666'], [50, 120], [0.3, 0.5], [2, 4]);
+  }
+  game.mathCooldown = performance.now() + 3000;
+  game.mathActive = false;
 }
 
 function dealDamage(monster, amount, source) {
@@ -478,7 +512,6 @@ function update(dt) {
       const def = MONSTER_DEFS[m.type];
       spawnParticles(m.x, m.y, 20, [def.color, '#fff', '#ffcdd2'], [50, 150], [0.3, 0.7], [2, 5]);
       if (m.type === 'tank') game.shakeAmount = Math.max(game.shakeAmount, 6);
-      if (m === game.mathTarget) { game.mathTarget = null; game.mathCooldown = performance.now() + 3000; }
       game.monsters.splice(i, 1);
     }
   }
@@ -609,14 +642,12 @@ function update(dt) {
   // Banner timer
   if (game.bannerTimer > 0) game.bannerTimer -= dt;
 
-  // Math auto-targeting
-  if (game.phase === 'active' && !game.mathTarget && performance.now() >= game.mathCooldown) {
-    pickMathTarget();
-  }
-  // If math target died
-  if (game.mathTarget && (!game.mathTarget.alive || game.mathTarget.reachedEnd)) {
-    game.mathTarget = null;
-    game.mathCooldown = performance.now() + 1500;
+  // Math activation — enable input after cooldown
+  if (game.phase === 'active' && !game.mathActive && performance.now() >= game.mathCooldown) {
+    if (game.monsters.some(m => m.alive && !m.reachedEnd)) {
+      game.mathActive = true;
+      game.mathInput = '';
+    }
   }
 
   // Wave complete check
@@ -628,7 +659,7 @@ function update(dt) {
       game.phase = 'prep';
       game.gold += 10 + game.wave * 5;
       showBanner(`Wave ${game.wave} Complete! +${10 + game.wave * 5}g`);
-      game.mathTarget = null;
+      game.mathActive = false;
     }
   }
 
@@ -766,11 +797,11 @@ function render() {
     const def = MONSTER_DEFS[m.type];
     const r = def.radius;
 
-    // Math target highlight
-    if (m === game.mathTarget) {
-      ctx.beginPath(); ctx.arc(m.x, m.y, r + 8, 0, Math.PI*2);
-      const pulse = 0.4 + 0.3 * Math.sin(performance.now() / 150);
-      ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 3; ctx.globalAlpha = pulse; ctx.stroke(); ctx.globalAlpha = 1;
+    // Equation glow when math is active
+    if (game.mathActive) {
+      ctx.beginPath(); ctx.arc(m.x, m.y, r + 6, 0, Math.PI*2);
+      const pulse = 0.15 + 0.1 * Math.sin(performance.now() / 200 + m.x);
+      ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2; ctx.globalAlpha = pulse; ctx.stroke(); ctx.globalAlpha = 1;
     }
 
     // Shield ring
@@ -843,10 +874,17 @@ function render() {
       ctx.fillStyle = '#42a5f5'; ctx.fillRect(barX, barY - 3, barW * shieldRatio, 2);
     }
 
-    // Equation text above monster (small, for the targeted one it's shown bigger in the overlay)
-    if (m === game.mathTarget) {
-      ctx.font = 'bold 14px monospace'; ctx.fillStyle = '#FFD700'; ctx.textAlign = 'center';
-      ctx.fillText(m.equation.display + ' = ?', m.x, m.y - r - 16);
+    // Equation text above every monster
+    if (game.phase === 'active') {
+      const eqText = m.equation.display + ' = ?';
+      const eqY = m.y - r - 16;
+      // Background pill for readability
+      ctx.font = 'bold 11px monospace';
+      const tw = ctx.measureText(eqText).width;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.beginPath(); ctx.roundRect(m.x - tw/2 - 4, eqY - 9, tw + 8, 14, 3); ctx.fill();
+      ctx.fillStyle = game.mathActive ? '#FFD700' : '#aaa'; ctx.textAlign = 'center';
+      ctx.fillText(eqText, m.x, eqY);
     }
   }
 
@@ -1019,21 +1057,21 @@ function render() {
     ctx.fillText('[SPACE]', GAME_W + SIDEBAR_W/2, by + 42);
   }
 
-  // Math input overlay
-  if (game.mathTarget && game.phase === 'active') {
-    const ox = GAME_W / 2 - 200, oy = H - 90, ow = 400, oh = 75;
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'; ctx.fillRect(ox, oy, ow, oh);
+  // Math input overlay — always visible when active
+  if (game.mathActive && game.phase === 'active') {
+    const ox = GAME_W / 2 - 200, oy = H - 75, ow = 400, oh = 55;
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'; ctx.fillRect(ox, oy, ow, oh);
     ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2; ctx.strokeRect(ox, oy, ow, oh);
-    ctx.font = 'bold 26px monospace'; ctx.fillStyle = '#FFD700'; ctx.textAlign = 'center';
-    ctx.fillText(game.mathEquation.display + ' = ?', ox + ow/2, oy + 30);
+    ctx.font = 'bold 16px "Segoe UI", sans-serif'; ctx.fillStyle = '#94a3b8'; ctx.textAlign = 'center';
+    ctx.fillText('Type an answer to attack!', ox + ow/2, oy + 18);
     // Input
     const cursor = Math.floor(performance.now() / 500) % 2 === 0 ? '|' : '';
-    ctx.font = 'bold 22px monospace'; ctx.fillStyle = '#fff';
-    ctx.fillText(game.mathInput + cursor, ox + ow/2, oy + 60);
+    ctx.font = 'bold 24px monospace'; ctx.fillStyle = '#fff';
+    ctx.fillText(game.mathInput + cursor, ox + ow/2, oy + 45);
   }
 
   // Cooldown indicator
-  if (game.phase === 'active' && !game.mathTarget && performance.now() < game.mathCooldown) {
+  if (game.phase === 'active' && !game.mathActive && performance.now() < game.mathCooldown) {
     const remaining = ((game.mathCooldown - performance.now()) / 1000).toFixed(1);
     ctx.font = '14px "Segoe UI", sans-serif'; ctx.fillStyle = '#94a3b8'; ctx.textAlign = 'center';
     ctx.fillText(`Next equation in ${remaining}s`, GAME_W / 2, H - 30);
@@ -1073,7 +1111,7 @@ function render() {
   // Wave 1 tutorial hint
   if (game.wave === 1 && game.phase === 'active' && game.monsters.length > 0 && game.spawnQueue.length > 3) {
     ctx.font = '14px "Segoe UI", sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.textAlign = 'center';
-    ctx.fillText('Type the answer to attack highlighted monsters!', GAME_W/2, 25);
+    ctx.fillText('Solve any equation — all monsters with that answer get hit!', GAME_W/2, 25);
     ctx.fillText('Place towers with number keys 1-5', GAME_W/2, 45);
   }
 }
@@ -1323,13 +1361,13 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Math input
-  if (game.mathTarget && game.phase === 'active') {
+  // Math input — active during waves when not in cooldown
+  if (game.mathActive && game.phase === 'active') {
     if (e.key >= '0' && e.key <= '9') { game.mathInput += e.key; return; }
     if (e.key === '-' && game.mathInput === '') { game.mathInput = '-'; return; }
     if (e.key === 'Backspace') { game.mathInput = game.mathInput.slice(0, -1); return; }
     if (e.key === 'Enter') { submitMathAnswer(); return; }
-    if (e.key === 'Escape') { game.mathTarget = null; game.mathInput = ''; return; }
+    if (e.key === 'Escape') { game.mathInput = ''; return; }
     return;
   }
 
