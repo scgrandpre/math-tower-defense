@@ -173,11 +173,11 @@ const TOWER_ORDER = ['archer', 'cannon', 'frost', 'lightning', 'bomb'];
 // MONSTER DEFINITIONS
 // ============================================================
 const MONSTER_DEFS = {
-  grunt:    { name: 'Grunt',    color: '#e74c3c', baseHp: 80,  speed: 60,  reward: 15, shape: 'circle', radius: 15 },
-  speedster:{ name: 'Speedster',color: '#00e5ff', baseHp: 40,  speed: 120, reward: 20, shape: 'triangle', radius: 12 },
-  tank:     { name: 'Tank',     color: '#6a1b9a', baseHp: 250, speed: 35,  reward: 30, shape: 'square', radius: 20, armorType: 'archer-resist' },
-  healer:   { name: 'Healer',   color: '#66bb6a', baseHp: 60,  speed: 50,  reward: 25, shape: 'circle', radius: 14 },
-  shielded: { name: 'Shielded', color: '#42a5f5', baseHp: 100, speed: 55,  reward: 25, shape: 'hexagon', radius: 16, baseShield: 50 },
+  grunt:    { name: 'Grunt',    color: '#e74c3c', baseHp: 150, speed: 50,  reward: 18, shape: 'circle', radius: 15 },
+  speedster:{ name: 'Speedster',color: '#00e5ff', baseHp: 80,  speed: 100, reward: 22, shape: 'triangle', radius: 12 },
+  tank:     { name: 'Tank',     color: '#6a1b9a', baseHp: 400, speed: 30,  reward: 35, shape: 'square', radius: 20, armorType: 'archer-resist' },
+  healer:   { name: 'Healer',   color: '#66bb6a', baseHp: 100, speed: 45,  reward: 28, shape: 'circle', radius: 14 },
+  shielded: { name: 'Shielded', color: '#42a5f5', baseHp: 180, speed: 45,  reward: 28, shape: 'hexagon', radius: 16, baseShield: 80 },
 };
 
 // ============================================================
@@ -221,7 +221,7 @@ let game = {
   lightnings: [],
   spawnQueue: [],
   spawnTimer: 0,
-  spawnInterval: 1.5,
+  spawnInterval: 2.5,
   selectedTowerType: null,
   selectedTower: null,
   hoveredCell: null,
@@ -232,7 +232,7 @@ let game = {
   mathCooldown: 0,
   // Effects
   shakeAmount: 0,
-  shakeDecay: 0.85,
+  shakeDecay: 0.9,
   bannerText: null,
   bannerTimer: 0,
   // Timing
@@ -635,10 +635,6 @@ function update(dt) {
     if (game.lightnings[i].life <= 0) game.lightnings.splice(i, 1);
   }
 
-  // Screen shake decay
-  game.shakeAmount *= game.shakeDecay;
-  if (game.shakeAmount < 0.1) game.shakeAmount = 0;
-
   // Banner timer
   if (game.bannerTimer > 0) game.bannerTimer -= dt;
 
@@ -677,6 +673,10 @@ function render() {
   ctx.clearRect(0, 0, W, H);
 
   if (game.phase === 'profile') { renderProfileScreen(); return; }
+
+  // Screen shake decay (runs every frame, all phases)
+  game.shakeAmount *= game.shakeDecay;
+  if (game.shakeAmount < 0.3) game.shakeAmount = 0;
 
   // Game area background
   ctx.save();
@@ -877,12 +877,14 @@ function render() {
     // Equation text above every monster
     if (game.phase === 'active') {
       const eqText = m.equation.display + ' = ?';
-      const eqY = m.y - r - 16;
+      const eqY = m.y - r - 20;
       // Background pill for readability
-      ctx.font = 'bold 11px monospace';
+      ctx.font = 'bold 14px "Segoe UI", sans-serif';
       const tw = ctx.measureText(eqText).width;
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.beginPath(); ctx.roundRect(m.x - tw/2 - 4, eqY - 9, tw + 8, 14, 3); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      ctx.beginPath(); ctx.roundRect(m.x - tw/2 - 6, eqY - 12, tw + 12, 20, 5); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,215,0,0.3)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(m.x - tw/2 - 6, eqY - 12, tw + 12, 20, 5); ctx.stroke();
       ctx.fillStyle = game.mathActive ? '#FFD700' : '#aaa'; ctx.textAlign = 'center';
       ctx.fillText(eqText, m.x, eqY);
     }
