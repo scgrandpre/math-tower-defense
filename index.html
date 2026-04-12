@@ -412,9 +412,9 @@ function submitMathAnswer() {
     // Wrong — no monsters matched
     addFloatingText(GAME_W / 2, H - 110, 'NO MATCH!', '#FF3333', 18);
     spawnParticles(GAME_W / 2, H - 60, 8, ['#FF3333', '#FF6666'], [50, 120], [0.3, 0.5], [2, 4]);
+    game.mathCooldown = performance.now() + 3000;
+    game.mathActive = false;
   }
-  game.mathCooldown = performance.now() + 3000;
-  game.mathActive = false;
 }
 
 function dealDamage(monster, amount, source) {
