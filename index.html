@@ -44,16 +44,22 @@ function saveProfiles(profiles) { localStorage.setItem('mathTD_profiles', JSON.s
 function generateEquation(grade, wave) {
   const r = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
   if (grade <= 3) {
+    // All numbers 12 and under: max 12+12, 12x12, 144/12, 24-12
     const tier = Math.min(2, Math.floor(wave / 5));
+    const pick = Math.random();
     if (tier === 0) {
-      if (Math.random() < 0.6) { const a = r(2, 20 + wave*3), b = r(2, 20 + wave*2); return { display: `${a} + ${b}`, answer: a+b }; }
-      else { const a = r(10, 30 + wave*2), b = r(2, a-1); return { display: `${a} - ${b}`, answer: a-b }; }
+      // Addition and subtraction only
+      if (pick < 0.6) { const a = r(1, 12), b = r(1, 12); return { display: `${a} + ${b}`, answer: a+b }; }
+      else { const a = r(1, 12), b = r(1, a); return { display: `${a} - ${b}`, answer: a-b }; }
     } else if (tier === 1) {
-      const a = r(2, Math.random()<0.7?9:12), b = r(2, Math.random()<0.7?9:12);
-      return { display: `${a} \u00d7 ${b}`, answer: a*b };
+      // Add multiplication
+      if (pick < 0.4) { const a = r(1, 12), b = r(1, 12); return { display: `${a} + ${b}`, answer: a+b }; }
+      else { const a = r(2, 12), b = r(2, 12); return { display: `${a} \u00d7 ${b}`, answer: a*b }; }
     } else {
-      if (Math.random() < 0.5) { const a = r(3,12), b = r(2,12); return { display: `${a} \u00d7 ${b}`, answer: a*b }; }
-      else { const b = r(2,9), ans = r(2,9); return { display: `${b*ans} \u00f7 ${b}`, answer: ans }; }
+      // Add division
+      if (pick < 0.3) { const a = r(1, 12), b = r(1, 12); return { display: `${a} + ${b}`, answer: a+b }; }
+      else if (pick < 0.6) { const a = r(2, 12), b = r(2, 12); return { display: `${a} \u00d7 ${b}`, answer: a*b }; }
+      else { const b = r(2, 12), ans = r(2, 12); return { display: `${b*ans} \u00f7 ${b}`, answer: ans }; }
     }
   } else {
     const tier = Math.min(3, Math.floor(wave / 4));
@@ -69,7 +75,7 @@ function generateEquation(grade, wave) {
 // ============================================================
 const PATH = [
   {x:0,y:180},{x:280,y:180},{x:280,y:520},{x:520,y:520},
-  {x:520,y:130},{x:740,y:130},{x:740,y:480},{x:960,y:480}
+  {x:520,y:130},{x:720,y:130},{x:720,y:480},{x:960,y:480}
 ];
 function pathSegmentLength(i) { const dx=PATH[i+1].x-PATH[i].x,dy=PATH[i+1].y-PATH[i].y; return Math.sqrt(dx*dx+dy*dy); }
 const segLengths = [];
@@ -83,7 +89,7 @@ function posOnPath(segIdx,progress){const p0=PATH[segIdx],p1=PATH[segIdx+1];retu
 const GRID_COLS=Math.floor(GAME_W/CELL),GRID_ROWS=Math.floor(H/CELL);
 const validGrid=[];
 function distPtSeg(px,py,ax,ay,bx,by){const dx=bx-ax,dy=by-ay,lenSq=dx*dx+dy*dy;let t=lenSq===0?0:Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/lenSq));const cx=ax+t*dx,cy=ay+t*dy;return Math.sqrt((px-cx)*(px-cx)+(py-cy)*(py-cy));}
-for(let r=0;r<GRID_ROWS;r++){validGrid[r]=[];for(let c=0;c<GRID_COLS;c++){const cx=c*CELL+CELL/2,cy=r*CELL+CELL/2;let near=false;for(let i=0;i<PATH.length-1;i++){if(distPtSeg(cx,cy,PATH[i].x,PATH[i].y,PATH[i+1].x,PATH[i+1].y)<50){near=true;break;}}validGrid[r][c]=!near;}}
+for(let r=0;r<GRID_ROWS;r++){validGrid[r]=[];for(let c=0;c<GRID_COLS;c++){const cx=c*CELL+CELL/2,cy=r*CELL+CELL/2;let near=false;for(let i=0;i<PATH.length-1;i++){if(distPtSeg(cx,cy,PATH[i].x,PATH[i].y,PATH[i+1].x,PATH[i+1].y)<25){near=true;break;}}validGrid[r][c]=!near;}}
 
 // ============================================================
 // DRAGON DRAWING FUNCTIONS
@@ -410,7 +416,15 @@ function generateSharedEquation(wave) {
 function generateEquationWithAnswer(grade, wave, answer) {
   if(answer<2)return null;
   const r=(min,max)=>Math.floor(Math.random()*(max-min+1))+min;
-  if(grade<=3){const b=r(1,Math.min(answer-1,20));if(Math.random()<0.5)return{display:`${answer-b} + ${b}`,answer};const a=answer+r(1,15);return{display:`${a} - ${a-answer}`,answer};}
+  if(grade<=3){
+    // Keep all operands <= 12
+    if(answer<=12){const b=r(1,Math.min(answer,12));const a=answer-b;if(a>=0&&a<=12&&b<=12)return{display:`${a} + ${b}`,answer};}
+    // Try subtraction: a - b = answer, both <= 12
+    if(answer<=12){const b=r(1,12-answer);if(b>0)return{display:`${answer+b} - ${b}`,answer};}
+    // Try multiplication
+    for(let f=2;f<=12;f++){if(answer%f===0&&answer/f>=2&&answer/f<=12)return{display:`${f} \u00d7 ${answer/f}`,answer};}
+    return null; // Can't make a grade-3 equation for this answer
+  }
   for(let f=2;f<=12;f++){if(answer%f===0&&answer/f>=2&&answer/f<=12)return{display:`${f} \u00d7 ${answer/f}`,answer};}
   const b=r(1,Math.min(answer-1,30));return{display:`${answer-b} + ${b}`,answer};
 }
