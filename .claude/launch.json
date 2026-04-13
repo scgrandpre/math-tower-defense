@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "math-td",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "/Users/scgrandpre/Documents/Claude/math-tower-defense"],
+      "port": 8080
+    }
+  ]
+}
