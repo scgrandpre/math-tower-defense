@@ -662,16 +662,6 @@ function render() {
     ctx.fillStyle=hpRatio>0.5?'#44ff44':hpRatio>0.25?'#ffaa00':'#ff4444';
     ctx.fillRect(barX,barY,barW*hpRatio,barH);
     if(m.maxShieldHp>0){const sr=m.shieldHp/m.maxShieldHp;ctx.fillStyle='#B3E5FC';ctx.fillRect(barX,barY-3,barW*sr,2);}
-    // Equation
-    if(game.phase==='active'){
-      const eqText=m.equation.display+' = ?', eqY=m.y-r-20;
-      ctx.font='bold 14px "Segoe UI", sans-serif';
-      const tw=ctx.measureText(eqText).width;
-      ctx.fillStyle='rgba(0,0,0,0.75)';ctx.beginPath();ctx.roundRect(m.x-tw/2-6,eqY-12,tw+12,20,5);ctx.fill();
-      ctx.strokeStyle='rgba(255,215,0,0.3)';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(m.x-tw/2-6,eqY-12,tw+12,20,5);ctx.stroke();
-      ctx.fillStyle=game.mathActive?'#FFD700':'#aaa';ctx.textAlign='center';
-      ctx.fillText(eqText,m.x,eqY);
-    }
   }
 
   // Projectiles
@@ -709,6 +699,21 @@ function render() {
   // Floating texts
   for(const ft of game.floatingTexts){ctx.globalAlpha=Math.max(0,ft.life/ft.maxLife);ctx.font=`bold ${ft.fontSize}px 'Segoe UI',sans-serif`;ctx.fillStyle=ft.color;ctx.textAlign='center';ctx.strokeStyle='#000';ctx.lineWidth=3;ctx.strokeText(ft.text,ft.x,ft.y);ctx.fillText(ft.text,ft.x,ft.y);}
   ctx.globalAlpha=1;
+
+  // Equations — drawn last so they're always on top
+  if(game.phase==='active'){
+    for(const m of game.monsters){
+      if(!m.alive) continue;
+      const r=MONSTER_DEFS[m.type].radius, eqText=m.equation.display+' = ?', eqY=m.y-r-20;
+      ctx.font='bold 14px "Segoe UI", sans-serif';
+      const tw=ctx.measureText(eqText).width;
+      ctx.fillStyle='rgba(0,0,0,0.85)';ctx.beginPath();ctx.roundRect(m.x-tw/2-6,eqY-12,tw+12,20,5);ctx.fill();
+      ctx.strokeStyle='rgba(255,215,0,0.3)';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(m.x-tw/2-6,eqY-12,tw+12,20,5);ctx.stroke();
+      ctx.fillStyle=game.mathActive?'#FFD700':'#aaa';ctx.textAlign='center';
+      ctx.fillText(eqText,m.x,eqY);
+    }
+  }
+
   ctx.restore();
 
   // ---- SIDEBAR ----
